@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/looplj/axonhub/internal/authz"
@@ -216,6 +217,7 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		ModelMapper:           processor.ModelMapper,
 		Proxy:                 processor.proxy,
 		CurrentCandidateIndex: 0,
+		HeaderChannelTags:     parseChannelTags(request.Headers.Get("Ah-Channel-Tags")),
 	}
 
 	var pipelineOpts []pipeline.Option
@@ -350,4 +352,28 @@ func (processor *ChatCompletionOrchestrator) Process(ctx context.Context, reques
 		ChatCompletion:       result.Response,
 		ChatCompletionStream: nil,
 	}, nil
+}
+
+// parseChannelTags splits a comma-separated header value into a tag slice,
+// trimming whitespace and filtering empty strings.
+func parseChannelTags(header string) []string {
+	if header == "" {
+		return nil
+	}
+
+	parts := strings.Split(header, ",")
+	tags := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+
+	if len(tags) == 0 {
+		return nil
+	}
+
+	return tags
 }

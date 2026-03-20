@@ -28,6 +28,10 @@ type PersistenceState struct {
 	// Proxy config, will be used to override channel's default proxy config.
 	Proxy *httpclient.ProxyConfig
 
+	// HeaderChannelTags holds channel tags parsed from the Ah-Channel-Tags request header.
+	// Applied as an additional filter after profile-based channel tag filtering.
+	HeaderChannelTags []string
+
 	// OriginalModel is the model after API key profile mapping, used for channel selection
 	OriginalModel string
 	RawRequest    *httpclient.Request

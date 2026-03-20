@@ -52,6 +52,11 @@ func selectCandidates(inbound *PersistentInboundTransformer, quotaProvider Provi
 			}
 		}
 
+		// Apply Ah-Channel-Tags header filter (after profile-based filtering)
+		if len(inbound.state.HeaderChannelTags) > 0 {
+			selector = WithChannelTagsFilterSelector(selector, inbound.state.HeaderChannelTags, "")
+		}
+
 		// Apply Google native tools filter (only for Gemini native API format)
 		if llmRequest.APIFormat == llm.APIFormatGeminiContents {
 			selector = WithGoogleNativeToolsSelector(selector)
