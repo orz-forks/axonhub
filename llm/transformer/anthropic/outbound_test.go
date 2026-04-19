@@ -742,9 +742,6 @@ func TestOutboundTransformer_ToolUse(t *testing.T) {
 					require.Equal(t, ToolTypeWebSearch20250305, anthropicReq.Tools[0].Type)
 					require.Empty(t, anthropicReq.Tools[0].Description)
 					require.Empty(t, anthropicReq.Tools[0].InputSchema)
-
-					// Verify beta header is set
-					require.Equal(t, "web-search-2025-03-05", result.Headers.Get("Anthropic-Beta"))
 				},
 			},
 			{
@@ -1094,9 +1091,8 @@ func TestOutboundTransformer_WebSearchBetaHeader(t *testing.T) {
 			},
 		}
 
-		result, err := transformer.TransformRequest(t.Context(), chatReq)
+		_, err = transformer.TransformRequest(t.Context(), chatReq)
 		require.NoError(t, err)
-		require.Equal(t, "web-search-2025-03-05", result.Headers.Get("Anthropic-Beta"))
 	})
 
 	t.Run("Direct Anthropic API with web_search_20250305 type input", func(t *testing.T) {
@@ -1123,8 +1119,6 @@ func TestOutboundTransformer_WebSearchBetaHeader(t *testing.T) {
 
 		result, err := transformer.TransformRequest(t.Context(), chatReq)
 		require.NoError(t, err)
-		// Should set Beta header for web_search tool type
-		require.Equal(t, "web-search-2025-03-05", result.Headers.Get("Anthropic-Beta"))
 
 		// Verify tool is converted correctly
 		var anthropicReq MessageRequest
@@ -1198,8 +1192,6 @@ func TestOutboundTransformer_WebSearchBetaHeader(t *testing.T) {
 
 		result, err := transformer.TransformRequest(t.Context(), chatReq)
 		require.NoError(t, err)
-		// Mixed tools with web_search should trigger Beta header
-		require.Equal(t, "web-search-2025-03-05", result.Headers.Get("Anthropic-Beta"))
 
 		// Verify tools are converted correctly
 		var anthropicReq MessageRequest

@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	httpclient.RegisterMergeWithAppendHeaders("Anthropic-Beta")
+	// httpclient.RegisterMergeWithAppendHeaders("Anthropic-Beta")
 }
 
 // PlatformType represents the platform type for Anthropic API.
@@ -206,19 +206,6 @@ func (t *OutboundTransformer) TransformRequest(
 	body, err := json.Marshal(anthropicReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal anthropic request: %w", err)
-	}
-
-	// Add beta header for web search feature only when:
-	// 1. Native web search tool is present, AND
-	// 2. Platform is direct Anthropic API or Bedrock (not Vertex which may not support this beta)
-	if containsNativeWebSearchTool(anthropicReq.Tools) {
-		//nolint:exhaustive // Checked.
-		switch t.config.Type {
-		case PlatformDirect:
-			headers.Add("Anthropic-Beta", "web-search-2025-03-05")
-		case PlatformBedrock:
-			anthropicReq.AnthropicBeta = append(anthropicReq.AnthropicBeta, "web-search-2025-03-05")
-		}
 	}
 
 	// Prepare authentication

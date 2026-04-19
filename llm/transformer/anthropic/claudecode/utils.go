@@ -115,31 +115,34 @@ func stripClaudeToolPrefixFromResponse(body []byte, prefix string) []byte {
 	return body
 }
 
-// mergeBetasIntoHeader merges beta features into the Anthropic-Beta header.
-func mergeBetasIntoHeader(baseBetas string, extraBetas []string) string {
+// mergeBetasIntoHeader merges Anthropic-Beta tokens, keeping inbound tokens
+// first and then appending any fallback tokens that weren't already supplied.
+// Each entry may itself be a comma-joined list, so tokenize before deduping.
+func mergeBetasIntoHeader(fallbackBetas string, inboundBetas []string) string {
 	var parts []string
 
-	existingSet := make(map[string]bool)
+	seen := make(map[string]bool)
 
-	// Add existing betas if present
-	baseBetas = strings.TrimSpace(baseBetas)
-	if baseBetas != "" {
-		for b := range strings.SplitSeq(baseBetas, ",") {
-			b = strings.TrimSpace(b)
-			if b != "" {
-				parts = append(parts, b)
-				existingSet[b] = true
-			}
+	appendToken := func(token string) {
+		token = strings.TrimSpace(token)
+		if token == "" || seen[token] {
+			return
+		}
+
+		parts = append(parts, token)
+		seen[token] = true
+	}
+
+	// Inbound tokens win ordering — caller-supplied betas come first.
+	for _, raw := range inboundBetas {
+		for beta := range strings.SplitSeq(raw, ",") {
+			appendToken(beta)
 		}
 	}
 
-	// Add extra betas if not already present
-	for _, beta := range extraBetas {
-		beta = strings.TrimSpace(beta)
-		if beta != "" && !existingSet[beta] {
-			parts = append(parts, beta)
-			existingSet[beta] = true
-		}
+	// Fallback betas fill in anything the inbound request didn't already send.
+	for beta := range strings.SplitSeq(fallbackBetas, ",") {
+		appendToken(beta)
 	}
 
 	return strings.Join(parts, ",")
