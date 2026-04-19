@@ -95,5 +95,8 @@
   "requests.drawer.viewDetail": "查看详情",
   "requests.drawer.noRequestBody": "无请求体",
   "requests.drawer.expandAll": "展开全部",
-  "requests.drawer.collapseAll": "折叠全部"
+  "requests.drawer.collapseAll": "折叠全部",
+  "requests.responseFlow.parameters": "参数",
+  "requests.responseFlow.copy": "复制",
+  "requests.responseFlow.toolCallIdPrefix": "工具调用 ID"
 }

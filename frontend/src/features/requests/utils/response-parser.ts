@@ -2,6 +2,48 @@ export interface ParsedResponse {
   content: string;
   reasoning: string;
   toolCalls: any[];
+  toolResults: ToolResultEntry[];
+}
+
+/**
+ * Represents an assistant-inlined tool result (Anthropic `tool_result` /
+ * `*_tool_result` content block). These are emitted by the model alongside
+ * `*_tool_use` blocks when a server-side tool ran within the turn.
+ */
+export interface ToolResultEntry {
+  /** The originating tool_use id this result corresponds to, if present. */
+  toolCallId?: string;
+  /** Original block type (e.g. `tool_result`, `web_search_tool_result`). */
+  blockType: string;
+  /** Raw content payload — may be a string, array, or error object. */
+  content: any;
+  /** True when the upstream marked this result as an error. */
+  isError?: boolean;
+}
+
+function isToolUseType(type: unknown): boolean {
+  return typeof type === 'string' && (type === 'tool_use' || type.endsWith('_tool_use'));
+}
+
+function isToolResultType(type: unknown): boolean {
+  return typeof type === 'string' && (type === 'tool_result' || type.endsWith('_tool_result'));
+}
+
+function detectErrorContent(content: any): boolean {
+  if (content == null) return false;
+  if (typeof content === 'object' && !Array.isArray(content) && typeof content.type === 'string') {
+    return content.type.endsWith('_error');
+  }
+  return false;
+}
+
+function buildToolResultEntry(part: any): ToolResultEntry {
+  return {
+    toolCallId: part.tool_use_id,
+    blockType: typeof part.type === 'string' ? part.type : 'tool_result',
+    content: part.content,
+    isError: Boolean(part.is_error) || detectErrorContent(part.content),
+  };
 }
 
 /**
@@ -12,6 +54,7 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
   let fullContent = '';
   let fullReasoning = '';
   let collectedToolCalls: any[] = [];
+  const collectedToolResults: ToolResultEntry[] = [];
   const normalizedChunks = chunks ?? [];
 
   // 1. Try to parse from body first (final result)
@@ -35,7 +78,7 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
             fullReasoning += part.thinking || '';
           } else if (part.type === 'reasoning') {
             fullReasoning += part.text || part.reasoning || '';
-          } else if (part.type === 'tool_use' || (typeof part.type === 'string' && part.type.endsWith('_tool_use'))) {
+          } else if (isToolUseType(part.type)) {
             // Anthropic tool_use / *_tool_use: normalize to OpenAI-compatible structure
             collectedToolCalls.push({
               id: part.id,
@@ -45,6 +88,8 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
                 arguments: typeof part.input === 'string' ? part.input : JSON.stringify(part.input || {}),
               },
             });
+          } else if (isToolResultType(part.type)) {
+            collectedToolResults.push(buildToolResultEntry(part));
           }
         });
       } else if (typeof message.content === 'string') {
@@ -116,12 +161,28 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
   }
 
   // 2. Fallback to chunks aggregation (for live streaming or when body is not formatted)
-  if (!fullContent && !fullReasoning && collectedToolCalls.length === 0 && normalizedChunks.length > 0) {
+  if (
+    !fullContent &&
+    !fullReasoning &&
+    collectedToolCalls.length === 0 &&
+    collectedToolResults.length === 0 &&
+    normalizedChunks.length > 0
+  ) {
     const openaiToolCallMap = new Map<number, any>();
 
-    // Anthropic content block state: keyed by block index
-    // Each block: { type: 'thinking' | 'text' | 'tool_use' | '<prefix>_tool_use', content: string, id?: string, name?: string }
-    const anthropicBlockMap = new Map<number, { type: string; content: string; id?: string; name?: string }>();
+    // Anthropic content block state: keyed by block index.
+    // Each block: { type: 'thinking' | 'text' | '*_tool_use' | '*_tool_result', content: string,
+    //               id?: string, name?: string, toolUseId?: string, isError?: boolean,
+    //               rawContent?: any }
+    const anthropicBlockMap = new Map<number, {
+      type: string;
+      content: string;
+      id?: string;
+      name?: string;
+      toolUseId?: string;
+      isError?: boolean;
+      rawContent?: any;
+    }>();
     let isAnthropicFormat = false;
 
     // OpenAI Responses API state: keyed by item_id
@@ -173,12 +234,30 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
         isAnthropicFormat = true;
         const index = data.index ?? 0;
         const block = data.content_block || {};
-        anthropicBlockMap.set(index, {
+        const blockEntry: {
+          type: string;
+          content: string;
+          id?: string;
+          name?: string;
+          toolUseId?: string;
+          isError?: boolean;
+          rawContent?: any;
+        } = {
           type: block.type || 'text',
           content: '',
           id: block.id,
           name: block.name,
-        });
+        };
+
+        // Anthropic ships *_tool_result blocks whole inside content_block_start;
+        // capture the payload so we can surface it at aggregation time.
+        if (isToolResultType(block.type)) {
+          blockEntry.toolUseId = block.tool_use_id;
+          blockEntry.rawContent = block.content;
+          blockEntry.isError = Boolean(block.is_error) || detectErrorContent(block.content);
+        }
+
+        anthropicBlockMap.set(index, blockEntry);
         return;
       }
 
@@ -261,8 +340,8 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
                 type: 'function',
                 function: {
                   name: name,
-                  arguments: typeof part.functionCall.args === 'string' 
-                    ? part.functionCall.args 
+                  arguments: typeof part.functionCall.args === 'string'
+                    ? part.functionCall.args
                     : JSON.stringify(part.functionCall.args || {}),
                 }
               });
@@ -303,7 +382,7 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
           fullReasoning += block.content;
         } else if (block.type === 'text') {
           fullContent += block.content;
-        } else if (block.type === 'tool_use' || block.type.endsWith('_tool_use')) {
+        } else if (isToolUseType(block.type)) {
           collectedToolCalls.push({
             id: block.id,
             type: 'function',
@@ -311,6 +390,13 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
               name: block.name || 'unknown',
               arguments: block.content,
             },
+          });
+        } else if (isToolResultType(block.type)) {
+          collectedToolResults.push({
+            toolCallId: block.toolUseId,
+            blockType: block.type,
+            content: block.rawContent,
+            isError: block.isError,
           });
         }
       }
@@ -326,5 +412,6 @@ export function parseResponse(body?: any, chunks?: any[] | null): ParsedResponse
     content: fullContent,
     reasoning: fullReasoning,
     toolCalls: collectedToolCalls,
+    toolResults: collectedToolResults,
   };
 }

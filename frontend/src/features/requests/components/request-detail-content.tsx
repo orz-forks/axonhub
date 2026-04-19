@@ -70,21 +70,26 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
   );
 
   const parsedResponse = useMemo(() => {
-    if (!request) return { content: '', reasoning: '', toolCalls: [] };
+    if (!request) return { content: '', reasoning: '', toolCalls: [], toolResults: [] };
     if (previewRequest) {
       return parseResponse(undefined, previewRequest.responseChunks);
     }
     return parseResponse(request.responseBody, request.responseChunks);
   }, [previewRequest, request]);
 
-  const hasPreviewData = !!(parsedResponse.content || parsedResponse.reasoning || parsedResponse.toolCalls.length > 0);
+  const hasPreviewData = !!(
+    parsedResponse.content ||
+    parsedResponse.reasoning ||
+    parsedResponse.toolCalls.length > 0 ||
+    parsedResponse.toolResults.length > 0
+  );
   const isLive = isPreviewStreaming || !!(request?.status === 'processing' && request?.stream);
   const hasResponseBody = !!(request?.responseBody && Object.keys(request.responseBody).length > 0);
   const hasResponseChunks = !!(request?.responseChunks && request.responseChunks.length > 0);
 
   const extractResponseText = useCallback(() => {
     if (!request) return '';
-    const { content, reasoning, toolCalls } = parsedResponse;
+    const { content, reasoning, toolCalls, toolResults } = parsedResponse;
 
     let result = '';
     if (reasoning) {
@@ -97,6 +102,17 @@ export function RequestDetailContent({ requestId, projectId, previewRequest, isP
       if (result) result += '\n\n';
       result += toolCalls.map(tc => {
         return `Tool Call: ${tc.function?.name}\nArguments: ${tc.function?.arguments}`;
+      }).join('\n\n');
+    }
+    if (toolResults.length > 0) {
+      if (result) result += '\n\n';
+      result += toolResults.map(tr => {
+        const body = typeof tr.content === 'string'
+          ? tr.content
+          : JSON.stringify(tr.content, null, 2);
+        const header = tr.isError ? 'Tool Error' : 'Tool Result';
+        const idSuffix = tr.toolCallId ? ` (${tr.toolCallId})` : '';
+        return `${header}${idSuffix} [${tr.blockType}]\n${body}`;
       }).join('\n\n');
     }
 
