@@ -59,3 +59,7 @@ require (
 )
 
 replace github.com/tmaxmax/go-sse => github.com/looplj/go-sse v0.0.0-20250909130008-e74a1155bc3b
+
+// Replace dubbogo/timer with a local fork that fixes a Close() deadlock.
+// See third_party/dubbogo-timer/PATCHES.md for details.
+replace github.com/dubbogo/timer => ../third_party/dubbogo-timer

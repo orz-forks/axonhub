@@ -93,6 +93,10 @@ replace github.com/tmaxmax/go-sse => github.com/looplj/go-sse v0.0.0-20250909130
 // Replace gin-contrib/sse with looplj/sse to add space after data: to improve compatibility.
 replace github.com/gin-contrib/sse => github.com/looplj/sse v0.0.0-20260223020440-b463add2d52f
 
+// Replace dubbogo/timer with a local fork that fixes a Close() deadlock.
+// See third_party/dubbogo-timer/PATCHES.md for details.
+replace github.com/dubbogo/timer => ./third_party/dubbogo-timer
+
 require (
 	ariga.io/atlas v0.38.0 // indirect
 	cel.dev/expr v0.25.1 // indirect

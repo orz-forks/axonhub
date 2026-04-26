@@ -22,6 +22,9 @@ RUN apk add --no-cache git ca-certificates tzdata
 
 COPY go.mod go.sum ./
 COPY llm/go.mod llm/go.sum llm/
+# third_party/ is referenced by `replace` directives in both go.mod files,
+# so it must be present before `go mod download`.
+COPY third_party/ third_party/
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOTOOLCHAIN=auto go mod download
